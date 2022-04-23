@@ -37,7 +37,7 @@ class VIO(object):
 
             if self._vio_viewer__ is not None:
                 self._vio_viewer__.update_image(_vio_img_msg__.cam0_image)
-            print('here',_vio_img_msg__)
+            #print('here',_vio_img_msg__)
             _vio_feature_msg__ = self.image_processor.stareo_callback(_vio_img_msg__)
 
             if _vio_feature_msg__ is not None:
@@ -58,7 +58,7 @@ class VIO(object):
             _vio_feature_msg__ = self.feature_queue.get()
             if _vio_feature_msg__ is None:
                 return
-            print('_vio_feature_msg__', _vio_feature_msg__.timestamp)
+            #print('_vio_feature_msg__', _vio_feature_msg__.timestamp)
             _vio_result__ = self.msckf.feature_callback(_vio_feature_msg__)
 
             if _vio_result__ is not None and self._vio_viewer__ is not None:

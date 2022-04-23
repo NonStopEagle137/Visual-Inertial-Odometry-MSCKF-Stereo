@@ -1,5 +1,4 @@
 import numpy as np
-<<<<<<< HEAD
 
 
 def skew(_vio_vec__):
@@ -151,7 +150,7 @@ class Isometry3d(object):
         _vio_R__ = self._vio_R__ @ T1._vio_R__
         _vio_t__ = self._vio_R__ @ T1._vio_t__ + self._vio_t__
         return Isometry3d(_vio_R__, _vio_t__)
-=======
+
 from numba import jit
 import scipy as sp
 """Some utility functions"""
@@ -270,4 +269,3 @@ class SE:
         R = M[:3,:3] @  T[:3,:3]
         t = M[:3,:3] @  T[:3, 3] + M[:3, 3]
         return self.mat(R, t)
->>>>>>> 8e056137acec7ffbb3ccc49ccd91bbc0a2c68969

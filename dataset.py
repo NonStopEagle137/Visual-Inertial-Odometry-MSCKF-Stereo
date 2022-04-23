@@ -301,7 +301,7 @@ if __name__ == '__main__':
             _vio_x__ = in_queue.get()
             if _vio_x__ is None:
                 return
-            print(_vio_x__.vio_timestamp__, source)
+            #print(_vio_x__.vio_timestamp__, source)
     _t2_ = Thread(target=print_msg, args=(_vio_imu_queue__, 'imu'))
     _t3_ = Thread(target=print_msg, args=(_vio_gt_queue__, 'groundtruth'))
     _t2_.start()
@@ -312,7 +312,7 @@ if __name__ == '__main__':
         _vio_x__ = _vio_img_queue__.get()
         if _vio_x__ is None:
             break
-        print(_vio_x__.vio_timestamp__, 'image')
+        #print(_vio_x__.vio_timestamp__, 'image')
         cv2.imshow('left', np.hstack([_vio_x__.cam0_image, _vio_x__.cam1_image]))
         cv2.waitKey(1)
         _vio_timestamps__.append(_vio_x__.vio_timestamp__)
@@ -323,7 +323,7 @@ if __name__ == '__main__':
     _t2_.join()
     _t3_.join()
 
-    print(f'\nelapsed time: {time.time() - _vio_now__}s')
-    print(f'_vio_dataset__ time _vio_interval__: {_vio_timestamps__[-1]} -> {_vio_timestamps__[0]}'
-        f'  ({_vio_timestamps__[-1]-_vio_timestamps__[0]}s)\n')
-    print('Please check if IMU and image are synced')
+    # print(f'\nelapsed time: {time.time() - _vio_now__}s')
+    # print(f'_vio_dataset__ time _vio_interval__: {_vio_timestamps__[-1]} -> {_vio_timestamps__[0]}'
+    #     f'  ({_vio_timestamps__[-1]-_vio_timestamps__[0]}s)\n')
+    # print('Please check if IMU and image are synced')

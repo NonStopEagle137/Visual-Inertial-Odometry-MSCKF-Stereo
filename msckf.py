@@ -6,6 +6,10 @@ from feature import Feature
 
 import time
 from collections import namedtuple
+from jit_utils import (_process_model, _predict_new_state, _propaget_state_Covariance, _state_augmentation,
+                        _fastInv, _fastNorm, _fastQR, _fastSolve, _fastSVD)
+
+
 
 
 
@@ -193,33 +197,33 @@ class MSCKF(object):
         # that are received before the image _vio_msg__.
         self.batch_imu_processing(feature_msg.timestamp)
 
-        print('---batch_imu_processing    ', time.time() - _vio_t__)
+        #print('---batch_imu_processing    ', time.time() - _vio_t__)
         _vio_t__ = time.time()
 
         # Augment the state vector.
         self.state_augmentation(feature_msg.timestamp)
 
-        print('---state_augmentation      ', time.time() - _vio_t__)
+        #print('---state_augmentation      ', time.time() - _vio_t__)
         _vio_t__ = time.time()
 
         # Add new observations for existing features or new features 
         # in the map server.
         self.add_feature_observations(feature_msg)
 
-        print('---add_feature_observations', time.time() - _vio_t__)
+        #print('---add_feature_observations', time.time() - _vio_t__)
         _vio_t__ = time.time()
 
         # Perform _vio_measurement__ update if necessary.
         # And prune features and camera states.
         self.remove_lost_features()
 
-        print('---remove_lost_features    ', time.time() - _vio_t__)
+        #print('---remove_lost_features    ', time.time() - _vio_t__)
         _vio_t__ = time.time()
 
         self.prune_cam_state_buffer()
 
-        print('---prune_cam_state_buffer  ', time.time() - _vio_t__)
-        print('---msckf elapsed:          ', time.time() - _vio_start__, f'({feature_msg.timestamp})')
+        #print('---prune_cam_state_buffer  ', time.time() - _vio_t__)
+        #print('---msckf elapsed:          ', time.time() - _vio_start__, f'({feature_msg.timestamp})')
 
         try:
             # Publish the odometry.
@@ -282,6 +286,8 @@ class MSCKF(object):
         # Remove all used IMU msgs.
         self.imu_msg_buffer = self.imu_msg_buffer[_vio_used_imu_msg_count__:]
 
+    
+
     def process_model(self, time, m_gyro, m_acc):
         _vio_imu_state__ = self.state_server._vio_imu_state__
         _dt_ = time - _vio_imu_state__.timestamp
@@ -290,28 +296,31 @@ class MSCKF(object):
         _vio_acc__ = m_acc - _vio_imu_state__.acc_bias
 
         # Compute discrete transition and noise covariance matrix
-        _vio_F__ = np.zeros((21, 21))
-        _vio_G__ = np.zeros((21, 12))
-
         _vio_R_w_i__ = to_rotation(_vio_imu_state__.orientation)
+        _vio_F__,_vio_G__, _vio_Fdt__, _vio_Fdt_square__, _vio_Fdt_cube__, _vio_Phi__  =  _process_model(_vio_gyro__,_vio_R_w_i__,_vio_acc__, _dt_)
+        
+        # _vio_F__ = np.zeros((21, 21))
+        # _vio_G__ = np.zeros((21, 12))
 
-        _vio_F__[:3, :3] = -skew(_vio_gyro__)
-        _vio_F__[:3, 3:6] = -np.identity(3)
-        _vio_F__[6:9, :3] = -_vio_R_w_i__.T @ skew(_vio_acc__)
-        _vio_F__[6:9, 9:12] = -_vio_R_w_i__.T
-        _vio_F__[12:15, 6:9] = np.identity(3)
+        # 
 
-        _vio_G__[:3, :3] = -np.identity(3)
-        _vio_G__[3:6, 3:6] = np.identity(3)
-        _vio_G__[6:9, 6:9] = -_vio_R_w_i__.T
-        _vio_G__[9:12, 9:12] = np.identity(3)
+        # _vio_F__[:3, :3] = -skew(_vio_gyro__)
+        # _vio_F__[:3, 3:6] = -np.identity(3)
+        # _vio_F__[6:9, :3] = -_vio_R_w_i__.T @ skew(_vio_acc__)
+        # _vio_F__[6:9, 9:12] = -_vio_R_w_i__.T
+        # _vio_F__[12:15, 6:9] = np.identity(3)
 
-        # Approximate matrix exponential to the 3rd order, which can be 
-        # considered to be accurate enough assuming _dt_ is within 0.01s.
-        _vio_Fdt__ = _vio_F__ * _dt_
-        _vio_Fdt_square__ = _vio_Fdt__ @ _vio_Fdt__
-        _vio_Fdt_cube__ = _vio_Fdt_square__ @ _vio_Fdt__
-        _vio_Phi__ = np.identity(21) + _vio_Fdt__ + _vio_Fdt_square__/2. + _vio_Fdt_cube__/6.
+        # _vio_G__[:3, :3] = -np.identity(3)
+        # _vio_G__[3:6, 3:6] = np.identity(3)
+        # _vio_G__[6:9, 6:9] = -_vio_R_w_i__.T
+        # _vio_G__[9:12, 9:12] = np.identity(3)
+
+        # # Approximate matrix exponential to the 3rd order, which can be 
+        # # considered to be accurate enough assuming _dt_ is within 0.01s.
+        # _vio_Fdt__ = _vio_F__ * _dt_
+        # _vio_Fdt_square__ = _vio_Fdt__ @ _vio_Fdt__
+        # _vio_Fdt_cube__ = _vio_Fdt_square__ @ _vio_Fdt__
+        # _vio_Phi__ = np.identity(21) + _vio_Fdt__ + _vio_Fdt_square__/2. + _vio_Fdt_cube__/6.
 
         # Propogate the state using 4th order Runge-Kutta
         self.predict_new_state(_dt_, _vio_gyro__, _vio_acc__)
@@ -335,9 +344,13 @@ class MSCKF(object):
         _vio_Phi__[12:15, :3] = _A2_ - (_A2_ @ _vio_u__ - _w2_)[:, None] * _vio_s__
 
         # Propogate the state covariance matrix.
-        _vio_Q__ = _vio_Phi__ @ _vio_G__ @ self.state_server._vio_continuous_noise_cov__ @ _vio_G__.T @ _vio_Phi__.T * _dt_
-        self.state_server._vio_state_cov__[:21, :21] = (
-            _vio_Phi__ @ self.state_server._vio_state_cov__[:21, :21] @ _vio_Phi__.T + _vio_Q__)
+
+        self.state_server._vio_state_cov__[:21, :21] = _propaget_state_Covariance(self.state_server._vio_continuous_noise_cov__,
+                                                        self.state_server._vio_state_cov__,
+                                                         _vio_G__, _vio_Phi__, _dt_)[:21, :21]
+        # _vio_Q__ = _vio_Phi__ @ _vio_G__ @ self.state_server._vio_continuous_noise_cov__ @ _vio_G__.T @ _vio_Phi__.T * _dt_
+        # self.state_server._vio_state_cov__[:21, :21] = (
+        #     _vio_Phi__ @ self.state_server._vio_state_cov__[:21, :21] @ _vio_Phi__.T + _vio_Q__)
 
         if len(self.state_server._vio_cam_states__) > 0:
             self.state_server._vio_state_cov__[:21, 21:] = (
@@ -355,60 +368,18 @@ class MSCKF(object):
         self.state_server._vio_imu_state__.velocity_null = _vio_imu_state__.velocity
 
     def predict_new_state(self, _dt_, _vio_gyro__, _vio_acc__):
-        # TODO: Will performing the forward integration using
-        # the inverse of the quaternion give better accuracy?
-        _vio_gyro_norm__ = np.linalg.norm(_vio_gyro__)
-        _vio_Omega__ = np.zeros((4, 4))
-        _vio_Omega__[:3, :3] = -skew(_vio_gyro__)
-        _vio_Omega__[:3, 3] = _vio_gyro__
-        _vio_Omega__[3, :3] = -_vio_gyro__
 
         _vio_q__ = self.state_server._vio_imu_state__.orientation
         _vio_v__ = self.state_server._vio_imu_state__.velocity
         _vio_p__ = self.state_server._vio_imu_state__._vio_position__
-
-        if _vio_gyro_norm__ > 1e-5:
-            _vio_dq_dt__ = (np.cos(_vio_gyro_norm__*_dt_*0.5) * np.identity(4) + 
-                np.sin(_vio_gyro_norm__*_dt_*0.5)/_vio_gyro_norm__ * _vio_Omega__) @ _vio_q__
-            _vio_dq_dt2__ = (np.cos(_vio_gyro_norm__*_dt_*0.25) * np.identity(4) + 
-                np.sin(_vio_gyro_norm__*_dt_*0.25)/_vio_gyro_norm__ * _vio_Omega__) @ _vio_q__
-        else:
-            _vio_dq_dt__ = np.cos(_vio_gyro_norm__*_dt_*0.5) * (np.identity(4) + 
-                _vio_Omega__*_dt_*0.5) @ _vio_q__
-            _vio_dq_dt2__ = np.cos(_vio_gyro_norm__*_dt_*0.25) * (np.identity(4) + 
-                _vio_Omega__*_dt_*0.25) @ _vio_q__
-
-        _vio_dR_dt_transpose__ = to_rotation(_vio_dq_dt__).T
-        _vio_dR_dt2_transpose__ = to_rotation(_vio_dq_dt2__).T
-
-        # k1 = f(tn, yn)
-        _vio_k1_p_dot__ = _vio_v__
-        _vio_k1_v_dot__ = to_rotation(_vio_q__).T @ _vio_acc__ + IMUState._vio_gravity__
-
-        # k2 = f(tn+_dt_/2, yn+k1*_dt_/2)
-        _vio_k1_v__ = _vio_v__ + _vio_k1_v_dot__*_dt_/2.
-        _vio_k2_p_dot__ = _vio_k1_v__
-        _vio_k2_v_dot__ = _vio_dR_dt2_transpose__ @ _vio_acc__ + IMUState._vio_gravity__
-        
-        # k3 = f(tn+_dt_/2, yn+k2*_dt_/2)
-        _vio_k2_v__ = _vio_v__ + _vio_k2_v_dot__*_dt_/2
-        _vio_k3_p_dot__ = _vio_k2_v__
-        _vio_k3_v_dot__ = _vio_dR_dt2_transpose__ @ _vio_acc__ + IMUState._vio_gravity__
-        
-        # k4 = f(tn+_dt_, yn+k3*_dt_)
-        _vio_k3_v__ = _vio_v__ + _vio_k3_v_dot__*_dt_
-        _vio_k4_p_dot__ = _vio_k3_v__
-        _vio_k4_v_dot__ = _vio_dR_dt_transpose__ @ _vio_acc__ + IMUState._vio_gravity__
-
-        # yn+1 = yn + _dt_/6*(k1+2*k2+2*k3+k4)
-        _vio_q__ = _vio_dq_dt__ / np.linalg.norm(_vio_dq_dt__)
-        _vio_v__ = _vio_v__ + (_vio_k1_v_dot__ + 2*_vio_k2_v_dot__ + 2*_vio_k3_v_dot__ + _vio_k4_v_dot__)*_dt_/6.
-        _vio_p__ = _vio_p__ + (_vio_k1_p_dot__ + 2*_vio_k2_p_dot__ + 2*_vio_k3_p_dot__ + _vio_k4_p_dot__)*_dt_/6.
-
+        _vio_gravity__ = IMUState._vio_gravity__
+        _vio_q__, _vio_v__, _vio_p__ = _predict_new_state(_dt_, _vio_gyro__, _vio_acc__,
+                                         _vio_q__, _vio_v__, _vio_p__, _vio_gravity__)
         self.state_server._vio_imu_state__.orientation = _vio_q__
         self.state_server._vio_imu_state__.velocity = _vio_v__
         self.state_server._vio_imu_state__._vio_position__ = _vio_p__
-
+        
+    
     # Measurement update
     # (state_augmentation, add_feature_observations)
     def state_augmentation(self, time):
@@ -429,29 +400,11 @@ class MSCKF(object):
         _vio_cam_state__.position_null = _vio_cam_state__._vio_position__
         self.state_server._vio_cam_states__[_vio_imu_state__.id] = _vio_cam_state__
 
-        # Update the covariance matrix of the state.
-        # To simplify computation, the matrix _vio_J__ below is the nontrivial block
-        # in Equation (16) of "MSCKF" paper.
-        _vio_J__ = np.zeros((6, 21))
-        _vio_J__[:3, :3] = _vio_R_i_c__
-        _vio_J__[:3, 15:18] = np.identity(3)
-        _vio_J__[3:6, :3] = skew(_vio_R_w_i__.T @ _vio_t_c_i__)
-        _vio_J__[3:6, 12:15] = np.identity(3)
-        _vio_J__[3:6, 18:21] = np.identity(3)
-
-        # Resize the state covariance matrix.
-        # old_rows, old_cols = self.state_server._vio_state_cov__.shape
-        _vio_old_size__ = self.state_server._vio_state_cov__.shape[0]   # symmetric
-        _vio_state_cov__ = np.zeros((_vio_old_size__+6, _vio_old_size__+6))
-        _vio_state_cov__[:_vio_old_size__, :_vio_old_size__] = self.state_server._vio_state_cov__
-
-        # Fill in the augmented state covariance.
-        _vio_state_cov__[_vio_old_size__:, :_vio_old_size__] = _vio_J__ @ _vio_state_cov__[:21, :_vio_old_size__]
-        _vio_state_cov__[:_vio_old_size__, _vio_old_size__:] = _vio_state_cov__[_vio_old_size__:, :_vio_old_size__].T
-        _vio_state_cov__[_vio_old_size__:, _vio_old_size__:] = _vio_J__ @ _vio_state_cov__[:21, :21] @ _vio_J__.T
-
+        _vio_stateCovShape__ = self.state_server._vio_state_cov__.shape[0]
+        _vio_state_covNew__ = np.zeros((_vio_stateCovShape__+6, _vio_stateCovShape__+6))
+        _vio_state_covNew__ = _state_augmentation(_vio_R_i_c__, _vio_R_w_i__, _vio_t_c_i__, self.state_server._vio_state_cov__, _vio_stateCovShape__)
         # Fix the covariance to be symmetric
-        self.state_server._vio_state_cov__ = (_vio_state_cov__ + _vio_state_cov__.T) / 2.
+        self.state_server._vio_state_cov__ = (_vio_state_covNew__ + _vio_state_covNew__.T) / 2.
 
     def add_feature_observations(self, feature_msg):
         _vio_state_id__ = self.state_server._vio_imu_state__.id
@@ -579,7 +532,7 @@ class MSCKF(object):
 
         # Project the residual and Jacobians onto the nullspace of _vio_H_fj__.
         # svd of _vio_H_fj__
-        _vio_U__, _vio____, _vio____ = np.linalg.svd(_vio_H_fj__)
+        _vio_U__, _vio____, _vio____ = _fastSVD(_vio_H_fj__)
         _vio_A__ = _vio_U__[:, 3:]
 
         _vio_H_x__ = _vio_A__.T @ _vio_H_xj__
@@ -595,7 +548,7 @@ class MSCKF(object):
         # complexity as in Equation (28), (29).
         if H.shape[0] > H.shape[1]:
             # QR decomposition
-            _vio_Q__, _vio_R__ = np.linalg.qr(H, mode='reduced')  # if M > N, return (M, N), (N, N)
+            _vio_Q__, _vio_R__ = _fastQR(H)  # if M > N, return (M, N), (N, N)
             _vio_H_thin__ = _vio_R__         # shape (N, N)
             _vio_r_thin__ = _vio_Q__.T @ _vio_r__   # shape (N,)
         else:
@@ -606,7 +559,7 @@ class MSCKF(object):
         _vio_P__ = self.state_server._vio_state_cov__
         _vio_S__ = _vio_H_thin__ @ _vio_P__ @ _vio_H_thin__.T + (self.config._vio_observation_noise__ * 
             np.identity(len(_vio_H_thin__)))
-        _vio_K_transpose__ = np.linalg.solve(_vio_S__, _vio_H_thin__ @ _vio_P__)
+        _vio_K_transpose__ = _fastSolve(_vio_S__, _vio_H_thin__ @ _vio_P__)
         _vio_K__ = _vio_K_transpose__.T   # shape (N, _vio_K__)
 
         # Compute the error of the state.
@@ -615,9 +568,9 @@ class MSCKF(object):
         # Update the IMU state.
         _vio_delta_x_imu__ = _vio_delta_x__[:21]
 
-        if (np.linalg.norm(_vio_delta_x_imu__[6:9]) > 0.5 or 
-            np.linalg.norm(_vio_delta_x_imu__[12:15]) > 1.0):
-            print('[Warning] Update change is too large')
+        # if (np.linalg.norm(_vio_delta_x_imu__[6:9]) > 0.5 or 
+        #     np.linalg.norm(_vio_delta_x_imu__[12:15]) > 1.0):
+        #     print('[Warning] Update change is too large')
 
         _vio_dq_imu__ = small_angle_quaternion(_vio_delta_x_imu__[:3])
         _vio_imu_state__ = self.state_server._vio_imu_state__
@@ -653,7 +606,7 @@ class MSCKF(object):
     def gating_test(self, H, _vio_r__, dof):
         _P1_ = H @ self.state_server._vio_state_cov__ @ H.T
         _P2_ = self.config._vio_observation_noise__ * np.identity(len(H))
-        _vio_gamma__ = _vio_r__ @ np.linalg.solve(_P1_+_P2_, _vio_r__)
+        _vio_gamma__ = _vio_r__ @ _fastSolve(_P1_+_P2_, _vio_r__)
 
         if(_vio_gamma__ < self.chi_squared_test_table[dof]):
             return True
@@ -921,7 +874,7 @@ class MSCKF(object):
             ) < self.config._vio_position_std_threshold__:
             return
 
-        print('Start online reset...')
+        # print('Start online reset...')
 
         # Remove all existing camera states.
         self.state_server._vio_cam_states__.clear()
@@ -934,12 +887,12 @@ class MSCKF(object):
 
     def publish(self, time):
         _vio_imu_state__ = self.state_server._vio_imu_state__
-        print('+++publish:')
-        print('   timestamp:', _vio_imu_state__.timestamp)
-        print('   orientation:', _vio_imu_state__.orientation)
-        print('   _vio_position__:', _vio_imu_state__._vio_position__)
-        print('   velocity:', _vio_imu_state__.velocity)
-        print()
+        # print('+++publish:')
+        # print('   timestamp:', _vio_imu_state__.timestamp)
+        # print('   orientation:', _vio_imu_state__.orientation)
+        # print('   _vio_position__:', _vio_imu_state__._vio_position__)
+        # print('   velocity:', _vio_imu_state__.velocity)
+        # print()
         
         _vio_T_i_w__ = Isometry3d(
             to_rotation(_vio_imu_state__.orientation).T,

@@ -4,6 +4,7 @@ import time
 
 from itertools import chain, compress
 from collections import defaultdict, namedtuple
+from jit_utils import _fastInv, _fastNorm
 
 
 
@@ -83,11 +84,11 @@ class ImageProcessor(object):
         self.cam1_distortion_coeffs = _vio_config__._vio_cam1_distortion_coeffs__   # vec4
 
         # Take a vector from cam0 frame to the IMU frame.
-        self.T_cam0_imu = np.linalg.inv(_vio_config__._vio_T_imu_cam0__)
+        self.T_cam0_imu = _fastInv(_vio_config__._vio_T_imu_cam0__)
         self.R_cam0_imu = self.T_cam0_imu[:3, :3]
         self.t_cam0_imu = self.T_cam0_imu[:3, 3]
         # Take a vector from cam1 frame to the IMU frame.
-        self.T_cam1_imu = np.linalg.inv(_vio_config__._vio_T_imu_cam1__)
+        self.T_cam1_imu = _fastInv(_vio_config__._vio_T_imu_cam1__)
         self.R_cam1_imu = self.T_cam1_imu[:3, :3]
         self.t_cam1_imu = self.T_cam1_imu[:3, 3]
 
@@ -112,22 +113,22 @@ class ImageProcessor(object):
             # Track the _vio_feature__ in the previous image.
             _vio_t__ = time.time()
             self.track_features()
-            print('___track_features:', time.time() - _vio_t__)
+            # print('___track_features:', time.time() - _vio_t__)
             _vio_t__ = time.time()
 
             # Add new vio_features into the current image.
             self.add_new_features()
-            print('___add_new_features:', time.time() - _vio_t__)
+            # print('___add_new_features:', time.time() - _vio_t__)
             _vio_t__ = time.time()
             self.prune_features()
-            print('___prune_features:', time.time() - _vio_t__)
+            # print('___prune_features:', time.time() - _vio_t__)
             _vio_t__ = time.time()
             # Draw results.
             # self.draw_features_stereo()
-            print('___draw_features_stereo:', time.time() - _vio_t__)
+            # print('___draw_features_stereo:', time.time() - _vio_t__)
             _vio_t__ = time.time()
 
-        print('===image process elapsed:', time.time() - _vio_start__, f'({stereo_msg.vio_timestamp__})')
+        # print('===image process elapsed:', time.time() - _vio_start__, f'({stereo_msg.vio_timestamp__})')
 
         try:
             return self.publish()
@@ -531,8 +532,8 @@ class ImageProcessor(object):
         """
         _vio_scaling_factor__ = 0
         for _vio_pt1__, _vio_pt2__ in zip(pts1, pts2):
-            _vio_scaling_factor__ += np.linalg.norm(_vio_pt1__)
-            _vio_scaling_factor__ += np.linalg.norm(_vio_pt2__)
+            _vio_scaling_factor__ += _fastNorm(_vio_pt1__)
+            _vio_scaling_factor__ += _fastNorm(_vio_pt2__)
 
         _vio_scaling_factor__ = (len(pts1) + len(pts2)) / _vio_scaling_factor__ * np.sqrt(2)
 
@@ -599,7 +600,7 @@ class ImageProcessor(object):
     #     mean_pt_distance = 0.0
     #     raw_inlier_count = 0
     #     for _vio_i__, pt_diff in enumerate(pts_diff):
-    #         distance = np.linalg.norm(pt_diff)
+    #         distance = _fastNorm(pt_diff)
     #         # 25 pixel distance is a pretty large tolerance for normal motion.
     #         # However, to be used with aggressive motion, this tolerance should
     #         # be increased significantly to match the usage.
@@ -625,7 +626,7 @@ class ImageProcessor(object):
     #         for _vio_i__, pt_diff in enumerate(pts_diff):
     #             if _vio_inlier_markers__[_vio_i__] == 0:
     #                 continue
-    #             if np.linalg.norm(pt_diff) > inlier_error * _vio_norm_pixel_unit__:
+    #             if _fastNorm(pt_diff) > inlier_error * _vio_norm_pixel_unit__:
     #                 _vio_inlier_markers__[_vio_i__] = 0
     #         return _vio_inlier_markers__
 
@@ -657,20 +658,20 @@ class ImageProcessor(object):
     #         coeff_tx = coeff_t_[:, 0]
     #         coeff_ty = coeff_t_[:, 1]
     #         coeff_tz = coeff_t_[:, 2]
-    #         coeff_l1_norm = np.linalg.norm(coeff_t_, 1, axis=0)
+    #         coeff_l1_norm = _fastNorm(coeff_t_, 1, axis=0)
     #         base_indicator = np.argmin(coeff_l1_norm)
 
     #         if base_indicator == 0:
     #             A = np.array([coeff_ty, coeff_tz]).T
-    #             solution = np.linalg.inv(A) @ (-coeff_tx)
+    #             solution = _fastInv(A) @ (-coeff_tx)
     #             model = [1.0, *solution]
     #         elif base_indicator == 1:
     #             A = np.array([coeff_tx, coeff_tz]).T
-    #             solution = np.linalg.inv(A) @ (-coeff_ty)
+    #             solution = _fastInv(A) @ (-coeff_ty)
     #             model = [solution[0], 1.0, solution[1]]
     #         else:
     #             A = np.array([coeff_tx, coeff_ty]).T
-    #             solution = np.linalg.inv(A) @ (-coeff_tz)
+    #             solution = _fastInv(A) @ (-coeff_tz)
     #             model = [*solution, 1.0]
 
     #         # Find all the inliers among _vio_point__ pairs.
@@ -696,15 +697,15 @@ class ImageProcessor(object):
 
     #         if base_indicator == 0:
     #             A = np.array([coeff_ty_better, coeff_tz_better]).T
-    #             solution = np.linalg.inv(A.T @ A) @ A.T @ (-coeff_tx_better)
+    #             solution = _fastInv(A.T @ A) @ A.T @ (-coeff_tx_better)
     #             model_better = [1.0, *solution]
     #         elif base_indicator == 1:
     #             A = np.array([coeff_tx_better, coeff_tz_better]).T
-    #             solution = np.linalg.inv(A.T @ A) @ A.T @ (-coeff_ty_better)
+    #             solution = _fastInv(A.T @ A) @ A.T @ (-coeff_ty_better)
     #             model_better = [solution[0], 1.0, solution[1]]
     #         else:
     #             A = np.array([coeff_tx_better, coeff_ty_better]).T
-    #             solution = np.linalg.inv(A.T @ A) @ A.T @ (-coeff_tz_better)
+    #             solution = _fastInv(A.T @ A) @ A.T @ (-coeff_tz_better)
     #             model_better = [*solution, 1.0]
 
     #         # Compute the _vio_error__ and upate the best model if possible.
@@ -754,10 +755,10 @@ class ImageProcessor(object):
             [intrinsics[0], 0.0, intrinsics[2]],
             [0.0, intrinsics[1], intrinsics[3]],
             [0.0, 0.0, 1.0]])
-        _vio_H__ = _vio_K__ @ R_p_c @ np.linalg.inv(_vio_K__)
+        _vio_H__ = _vio_K__ @ R_p_c @ _fastInv(_vio_K__)
 
         _vio_compensated_pts__ = []
-        for _vio_i__ in range(len(input_pts)):
+        for _vio_i__ in range(len(input_pts)): # change this for loop.
             _p1_ = np.array([*input_pts[_vio_i__], 1.0])
             _p2_ = _vio_H__ @ _p1_
             _vio_compensated_pts__.append(_p2_[:2] / _p2_[2])
@@ -811,7 +812,7 @@ class ImageProcessor(object):
 
         # Mark those tracked points out of the image region as untracked.
         _vio_img__ = self.cam1_curr_img_msg.image
-        for _vio_i__, _vio_point__ in enumerate(_vio_cam1_points__):
+        for _vio_i__, _vio_point__ in enumerate(_vio_cam1_points__): # remove this for loop
             if not _vio_inlier_markers__[_vio_i__]:
                 continue
             if (_vio_point__[0] < 0 or _vio_point__[0] > _vio_img__.shape[1]-1 or 
@@ -841,7 +842,7 @@ class ImageProcessor(object):
             _vio_pt0__ = np.array([*_vio_cam0_points_undistorted__[_vio_i__], 1.0])
             _vio_pt1__ = np.array([*_vio_cam1_points_undistorted__[_vio_i__], 1.0])
             _vio_epipolar_line__ = _vio_E__ @ _vio_pt0__
-            _vio_error__ = np.abs((_vio_pt1__ * _vio_epipolar_line__)[0]) / np.linalg.norm(
+            _vio_error__ = np.abs((_vio_pt1__ * _vio_epipolar_line__)[0]) / _fastNorm(
                 _vio_epipolar_line__[:2])
 
             if _vio_error__ > self._vio_config__._vio_stereo_threshold__ * _vio_norm_pixel_unit__:
@@ -977,7 +978,7 @@ if __name__ == '__main__':
             _vio_msg__ = in_queue.get()
             if _vio_msg__ is None:
                 return
-            print(_vio_msg__.timestamp, 'imu')
+            # print(_vio_msg__.timestamp, 'imu')
             _vio_image_processor__.imu_callback(_vio_msg__)
     _t2_ = Thread(target=process_imu, args=(_vio_imu_queue__,))
     _t2_._vio_start__()
@@ -986,7 +987,7 @@ if __name__ == '__main__':
         _vio_msg__ = _vio_img_queue__.get()
         if _vio_msg__ is None:
             break
-        print(_vio_msg__.timestamp, 'image')
+        # print(_vio_msg__.timestamp, 'image')
         # cv2.imshow('left', np.hstack([_vio_x__.cam0_image, _vio_x__.cam1_image]))
         # cv2.waitKey(1)
         # timestamps.append(_vio_x__.timestamp)
