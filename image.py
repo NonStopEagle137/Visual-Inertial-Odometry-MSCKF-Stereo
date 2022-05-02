@@ -275,23 +275,6 @@ class ImageProcessor(object):
         # Number of vio_features left after tracking.
         self.num_features['after_tracking'] = len(_vio_curr_tracked_cam0_points__)
 
-        # Outlier removal involves three steps, which forms a close
-        # loop between the previous and current frames of cam0 (left)
-        # and cam1 (right). Assuming the stereo matching between the
-        # previous cam0 and cam1 images are correct, the three steps are:
-        #
-        # prev frames cam0 ----------> cam1
-        #              |                |
-        #              |ransac          |ransac
-        #              |   stereo match |
-        # curr frames cam0 ----------> cam1
-        #
-        # 1) Stereo matching between current images of cam0 and cam1.
-        # 2) RANSAC between previous and current images of cam0.
-        # 3) RANSAC between previous and current images of cam1.
-        #
-        # For Step 3, tracking between the images is no longer needed.
-        # The stereo matching results are directly used in the RANSAC.
 
         # Step 1: stereo matching.
         _vio_curr_cam1_points__, _vio_match_inliers__ = self.stereo_match(
@@ -306,19 +289,6 @@ class ImageProcessor(object):
 
         # Number of vio_features left after stereo matching.
         self.num_features['after_matching'] = len(_vio_curr_matched_cam0_points__)
-
-        # Step 2 and 3: RANSAC on temporal image pairs of cam0 and cam1.
-        # _vio_cam0_ransac_inliers__ = self.two_point_ransac(
-        #     _vio_prev_matched_cam0_points__, _vio_curr_matched_cam0_points__,
-        #     _vio_cam0_R_p_c__, self.cam0_intrinsics, 
-        #     self.cam0_distortion_model, self.cam0_distortion_coeffs, 
-        #     self._vio_config__.ransac_threshold, 0.99)
-
-        # _vio_cam1_ransac_inliers__ = self.two_point_ransac(
-        #     _vio_prev_matched_cam1_points__, _vio_curr_matched_cam1_points__,
-        #     _vio_cam1_R_p_c__, self.cam1_intrinsics, 
-        #     self.cam1_distortion_model, self.cam1_distortion_coeffs, 
-        #     self._vio_config__.ransac_threshold, 0.99)
         _vio_cam0_ransac_inliers__ = [1] * len(_vio_prev_matched_cam0_points__)
         _vio_cam1_ransac_inliers__ = [1] * len(_vio_prev_matched_cam1_points__)
 
@@ -342,9 +312,6 @@ class ImageProcessor(object):
             _vio_after_ransac__ += 1
         self.num_features['_vio_after_ransac__'] = _vio_after_ransac__
 
-        # Compute the tracking rate.
-        # prev_feature_num = sum([len(_vio_x__) for _vio_x__ in self.prev_features])
-        # curr_feature_num = sum([len(_vio_x__) for _vio_x__ in self.curr_features])
 
 
     def add_new_features(self):
@@ -473,7 +440,7 @@ class ImageProcessor(object):
     def integrate_imu_data(self):
         """
         Integrates the IMU gyro readings between the two consecutive images, 
-        which is used for both tracking prediction and 2-_vio_point__ RANSAC.
+        which is used for both tracking prediction and 2-_vio_point__ RANSAC(To be implemented).
 
         Returns:
             _vio_cam0_R_p_c__: a rotation matrix which takes a vector from previous 
@@ -542,186 +509,6 @@ class ImageProcessor(object):
             pts2[_vio_i__] *= _vio_scaling_factor__
 
         return pts1, pts2, _vio_scaling_factor__
-
-    # def two_point_ransac(self, pts1, pts2, R_p_c, intrinsics, 
-    #         distortion_model, distortion_coeffs,
-    #         inlier_error, success_probability):
-    #     """
-    #     Applies two _vio_point__ ransac algorithm to mark the inliers in the input set.
-
-    #     Arguments:
-    #         pts1: first set of points.
-    #         pts2: second set of points.
-    #         R_p_c: a rotation matrix takes a vector in the previous camera frame 
-    #             to the current camera frame.
-    #         intrinsics: intrinsics of the camera.
-    #         distortion_model: distortion model of the camera.
-    #         distortion_coeffs: distortion coefficients.
-    #         inlier_error: acceptable _vio_error__ to be considered as an _vio_inlier__.
-    #         success_probability: the required probability of success.
-
-    #     Returns:
-    #         inlier_flag: 1 for inliers and 0 for outliers.
-    #     """
-    #     # Check the size of input _vio_point__ size.
-    #     assert len(pts1) == len(pts2), 'Sets of different size are used...'
-
-    #     _vio_norm_pixel_unit__ = 2.0 / (intrinsics[0] + intrinsics[1])
-    #     iter_num = int(np.ceil(np.log(1-success_probability) / np.log(1-0.7*0.7)))
-
-    #     # Initially, mark all points as inliers.
-    #     _vio_inlier_markers__ = [1] * len(pts1)
-
-    #     # Undistort all the points.
-    #     pts1_undistorted = self.undistort_points(pts1, intrinsics, 
-    #         distortion_model, distortion_coeffs)
-    #     pts2_undistorted = self.undistort_points(pts2, intrinsics, 
-    #         distortion_model, distortion_coeffs)
-
-    #     # Compenstate the points in the previous image with
-    #     # the relative rotation.
-    #     for _vio_i__, pt in enumerate(pts1_undistorted):
-    #         pt_h = np.array([*pt, 1.0])
-    #         pt_hc = R_p_c @ pt_h
-    #         pts1_undistorted[_vio_i__] = pt_hc[:2]
-
-    #     # Normalize the points to gain numerical stability.
-    #     pts1_undistorted, pts2_undistorted, _vio_scaling_factor__ = self.rescale_points(
-    #         pts1_undistorted, pts2_undistorted)
-
-    #     # Compute the difference between previous and current points,
-    #     # which will be used frequently later.
-    #     pts_diff = []
-    #     for _vio_pt1__, _vio_pt2__ in zip(pts1_undistorted, pts2_undistorted):
-    #         pts_diff.append(_vio_pt1__ - _vio_pt2__)
-
-    #     # Mark the _vio_point__ pairs with large difference directly.
-    #     # BTW, the mean distance of the rest of the _vio_point__ pairs are computed.
-    #     mean_pt_distance = 0.0
-    #     raw_inlier_count = 0
-    #     for _vio_i__, pt_diff in enumerate(pts_diff):
-    #         distance = _fastNorm(pt_diff)
-    #         # 25 pixel distance is a pretty large tolerance for normal motion.
-    #         # However, to be used with aggressive motion, this tolerance should
-    #         # be increased significantly to match the usage.
-    #         if distance > 50.0 * _vio_norm_pixel_unit__:
-    #             _vio_inlier_markers__[_vio_i__] = 0
-    #         else:
-    #             mean_pt_distance += distance
-    #             raw_inlier_count += 1
-
-    #     mean_pt_distance /= raw_inlier_count
-
-    #     # If the current number of inliers is less than 3, just mark
-    #     # all input as outliers. This case can happen with fast
-    #     # rotation where very few vio_features are tracked.
-    #     if raw_inlier_count < 3:
-    #         return [0] * len(_vio_inlier_markers__)
-
-    #     # Before doing 2-_vio_point__ RANSAC, we have to check if the motion
-    #     # is degenerated, meaning that there is no translation between
-    #     # the frames, in which case, the model of the RANSAC does not work. 
-    #     # If so, the distance between the matched points will be almost 0.
-    #     if mean_pt_distance < _vio_norm_pixel_unit__:
-    #         for _vio_i__, pt_diff in enumerate(pts_diff):
-    #             if _vio_inlier_markers__[_vio_i__] == 0:
-    #                 continue
-    #             if _fastNorm(pt_diff) > inlier_error * _vio_norm_pixel_unit__:
-    #                 _vio_inlier_markers__[_vio_i__] = 0
-    #         return _vio_inlier_markers__
-
-    #     # In the case of general motion, the RANSAC model can be applied.
-    #     # The three column corresponds to tx, ty, and tz respectively.
-    #     coeff_t = []
-    #     for _vio_i__, pt_diff in enumerate(pts_diff):
-    #         coeff_t.append(np.array([
-    #             pt_diff[1],
-    #             -pt_diff[0],
-    #             pts1_undistorted[0] * pts2_undistorted[1] - 
-    #             pts1_undistorted[1] * pts2_undistorted[0]]))
-    #     coeff_t = np.array(coeff_t)
-
-    #     raw_inlier_idx = np.where(_vio_inlier_markers__)[0]
-    #     best_inlier_set = []
-    #     best_error = 1e10
-
-    #     for _vio_i__ in range(iter_num):
-    #         # Randomly select two _vio_point__ pairs.
-    #         # Although this is a weird way of selecting two pairs, but it
-    #         # is able to efficiently avoid selecting repetitive pairs.
-    #         pair_idx1 = np.random.choice(raw_inlier_idx)
-    #         idx_diff = np.random.randint(1, len(raw_inlier_idx))
-    #         pair_idx2 = (pair_idx1+idx_diff) % len(raw_inlier_idx)
-
-    #         # Construct the model.
-    #         coeff_t_ = np.array([coeff_t[pair_idx1], coeff_t[pair_idx2]])
-    #         coeff_tx = coeff_t_[:, 0]
-    #         coeff_ty = coeff_t_[:, 1]
-    #         coeff_tz = coeff_t_[:, 2]
-    #         coeff_l1_norm = _fastNorm(coeff_t_, 1, axis=0)
-    #         base_indicator = np.argmin(coeff_l1_norm)
-
-    #         if base_indicator == 0:
-    #             A = np.array([coeff_ty, coeff_tz]).T
-    #             solution = _fastInv(A) @ (-coeff_tx)
-    #             model = [1.0, *solution]
-    #         elif base_indicator == 1:
-    #             A = np.array([coeff_tx, coeff_tz]).T
-    #             solution = _fastInv(A) @ (-coeff_ty)
-    #             model = [solution[0], 1.0, solution[1]]
-    #         else:
-    #             A = np.array([coeff_tx, coeff_ty]).T
-    #             solution = _fastInv(A) @ (-coeff_tz)
-    #             model = [*solution, 1.0]
-
-    #         # Find all the inliers among _vio_point__ pairs.
-    #         _vio_error__ = coeff_t @ model
-
-    #         inlier_set = []
-    #         for _vio_i__, e in enumerate(_vio_error__):
-    #             if _vio_inlier_markers__[_vio_i__] == 0:
-    #                 continue
-    #             if np.abs(e) < inlier_error * _vio_norm_pixel_unit__:
-    #                 inlier_set.append(_vio_i__)
-
-    #         # If the number of inliers is small, the current model is 
-    #         # probably wrong.
-    #         if len(inlier_set) < 0.2 * len(pts1_undistorted):
-    #             continue
-
-    #         # Refit the model using all of the possible inliers.
-    #         coeff_t_ = coeff_t[inlier_set]
-    #         coeff_tx_better = coeff_t_[:, 0]
-    #         coeff_ty_better = coeff_t_[:, 1]
-    #         coeff_tz_better = coeff_t_[:, 2]
-
-    #         if base_indicator == 0:
-    #             A = np.array([coeff_ty_better, coeff_tz_better]).T
-    #             solution = _fastInv(A.T @ A) @ A.T @ (-coeff_tx_better)
-    #             model_better = [1.0, *solution]
-    #         elif base_indicator == 1:
-    #             A = np.array([coeff_tx_better, coeff_tz_better]).T
-    #             solution = _fastInv(A.T @ A) @ A.T @ (-coeff_ty_better)
-    #             model_better = [solution[0], 1.0, solution[1]]
-    #         else:
-    #             A = np.array([coeff_tx_better, coeff_ty_better]).T
-    #             solution = _fastInv(A.T @ A) @ A.T @ (-coeff_tz_better)
-    #             model_better = [*solution, 1.0]
-
-    #         # Compute the _vio_error__ and upate the best model if possible.
-    #         new_error = coeff_t @ model_better
-    #         this_error = np.mean([np.abs(new_error[_vio_i__]) for _vio_i__ in inlier_set])
-
-    #         if len(inlier_set) > best_inlier_set:
-    #             best_error = this_error
-    #             best_inlier_set = inlier_set
-
-    #     # Fill in the markers.
-    #     _vio_inlier_markers__ = [0] * len(pts1)
-    #     for _vio_i__ in best_inlier_set:
-    #         _vio_inlier_markers__[_vio_i__] = 1
-
-    #     return _vio_inlier_markers__
 
     def get_grid_size(self, _vio_img__):
         """
