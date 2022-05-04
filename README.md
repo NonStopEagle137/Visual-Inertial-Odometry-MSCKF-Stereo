@@ -34,3 +34,6 @@ Run the file eskf_vio, please change the dataset path variable in the file to wh
 ### Results
 
 ![alt text](https://github.com/NonStopEagle137/Visual-Inertial-Odometry-MSCKF-Stereo/blob/master/Screenshot%202022-05-03%20203244.png)
+
+## Dataset
+http://robotics.ethz.ch/~asl-datasets/ijrr_euroc_mav_dataset/machine_hall/MH_01_easy/
