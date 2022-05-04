@@ -1,3 +1,0 @@
-#!/home/vijay/Visual-Inertial-Odometry-MSCKF-Stereo/MSCKF/tutorial-env/bin/python3
-from numba.pycc import main
-main()
